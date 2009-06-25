@@ -1,7 +1,7 @@
 /*
  * This file is part of the flashrom project.
  *
- * Copyright (C) 2000 Silicon Integrated System Corporation
+ * Copyright (C) 2009 Uwe Hermann <uwe@hermann-uwe.de>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,27 +20,36 @@
 
 #include "flash.h"
 
-int write_49f002(struct flashchip *flash, uint8_t *buf)
+int write_pm29f002(struct flashchip *flash, uint8_t *buf)
 {
-	int i;
-	int total_size = flash->total_size * 1024;
-	int page_size = flash->page_size;
+	int i, total_size = flash->total_size * 1024;
 	chipaddr bios = flash->virtual_memory;
+	chipaddr dst = bios;
 
-	if (erase_chip_jedec(flash)) {
+	/* Pm29F002T/B use the same erase method... */
+	if (erase_29f040b(flash)) {
 		fprintf(stderr, "ERASE FAILED!\n");
 		return -1;
 	}
 
 	printf("Programming page: ");
-	for (i = 0; i < total_size / page_size; i++) {
-		printf("%04d at address: 0x%08x ", i, i * page_size);
-		/* Byte-wise writing of 'page_size' bytes. */
-		write_sector_jedec(bios, buf + i * page_size,
-				   bios + i * page_size, page_size);
-		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-		fflush(stdout);
+	for (i = 0; i < total_size; i++) {
+		if ((i & 0xfff) == 0)
+			printf("address: 0x%08lx", (unsigned long)i);
+
+		/* Pm29F002T/B only support byte-wise programming. */
+		chip_writeb(0xAA, bios + 0x555);
+		chip_writeb(0x55, bios + 0x2AA);
+		chip_writeb(0xA0, bios + 0x555);
+		chip_writeb(*buf++, dst++);
+
+		/* Wait for Toggle bit ready. */
+		toggle_ready_jedec(dst);
+
+		if ((i & 0xfff) == 0)
+			printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 	}
+
 	printf("\n");
 
 	return 0;
