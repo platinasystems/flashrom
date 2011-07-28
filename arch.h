@@ -1,12 +1,11 @@
 /*
  * This file is part of the flashrom project.
  *
- * Copyright (C) 2009 Sean Nelson <audiohacked@gmail.com>
+ * Copyright (C) 2011 Carl-Daniel Hailfinger
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * the Free Software Foundation; version 2 of the License.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,35 +17,15 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <stdio.h>
-#include <stdarg.h>
-#include "flash.h"
+/*
+ * Header file for CPU architecture checking.
+ */
 
-int print(int type, const char *fmt, ...)
-{
-	va_list ap;
-	int ret;
-	FILE *output_type;
-
-	switch (type) {
-	case MSG_ERROR:
-		output_type = stderr;
-		break;
-	case MSG_BARF:
-		if (verbose < 2)
-			return 0;
-	case MSG_DEBUG:
-		if (verbose < 1)
-			return 0;
-	case MSG_INFO:
-	default:
-		output_type = stdout;
-		break;
-	}
-
-	va_start(ap, fmt);
-	ret = vfprintf(output_type, fmt, ap);
-	va_end(ap);
-	fflush(output_type);
-	return ret;
-}
+#if defined (__i386__) || defined (__x86_64__)
+#define __FLASHROM_ARCH__ "x86"
+#elif defined (__mips) || defined (__mips__) || defined (_mips) || defined (mips)
+#define __FLASHROM_ARCH__ "mips"
+#elif defined(__powerpc__) || defined(__powerpc64__) || defined(__ppc__) || defined(__ppc64__)
+#define __FLASHROM_ARCH__ "ppc"
+#endif
+__FLASHROM_ARCH__
