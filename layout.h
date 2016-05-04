@@ -54,6 +54,13 @@ struct fl_layout_single {
 	struct fl_romentry entry;
 };
 
-const struct fl_layout *get_global_layout(void);
+struct fl_layout_ich {
+	struct fl_layout base;
+	struct fl_romentry entries[5];
+};
+
+struct fl_layout *get_global_layout(void);
+
+int process_include_args(struct fl_layout *);
 
 #endif				/* !__LAYOUT_H__ */

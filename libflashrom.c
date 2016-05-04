@@ -31,6 +31,7 @@
 #include "flash.h"
 #include "programmer.h"
 #include "layout.h"
+#include "ich_descriptors.h"
 #include "libflashrom.h"
 
 /**
@@ -290,6 +291,79 @@ int fl_layout_include_region(fl_layout_t *const layout, const char *name)
 		}
 	}
 	return 1;
+}
+
+/**
+ * @brief Read a layout from the Intel ICH descriptor in the flash.
+ *
+ * Optionally verify that the layout matches the one in the given
+ * descriptor dump.
+ *
+ * @param flashctx Flash context to read the descriptor from flash.
+ * @param layout   Pointer that getwhere to store the layout.
+ * @param dump     The descriptor dump to compare to or NULL.
+ * @param len      The length of the descriptor dump.
+ *
+ * @return 0 on success,
+ *         5 if the descriptors don't match,
+ *         4 if the descriptor dump couldn't be parsed,
+ *         3 if the descriptor on flash couldn't be parsed,
+ *         2 if the descriptor on flash couldn't be read,
+ *         1 on any other error.
+ */
+int fl_layout_read_from_ifd(struct flashctx *const flashctx, fl_layout_t **const layout,
+			    const void *const dump, const size_t len)
+{
+	struct fl_layout_ich dump_layout;
+	int ret = 1;
+
+	void *const desc = malloc(0x1000);
+	struct fl_layout_ich *const chip_layout = malloc(sizeof(*chip_layout));
+	if (!desc || !chip_layout) {
+		msg_gerr("Out of memory!\n");
+		goto _free_ret;
+	}
+
+	if (prepare_flash_access(flashctx, true, false, false, false))
+		goto _free_ret;
+
+	msg_cinfo("Reading ich descriptor... ");
+	if (flashctx->chip->read(flashctx, desc, 0, 0x1000)) {
+		msg_cerr("Read operation failed!\n");
+		msg_cinfo("FAILED.\n");
+		ret = 2;
+		goto _unmap_ret;
+	}
+	msg_cinfo("done.\n");
+
+	if (layout_from_ich_descriptors(chip_layout, desc, 0x1000)) {
+		ret = 3;
+		goto _unmap_ret;
+	}
+
+	if (dump) {
+		if (layout_from_ich_descriptors(&dump_layout, dump, len)) {
+			ret = 4;
+			goto _unmap_ret;
+		}
+
+		if (chip_layout->base.num_entries != dump_layout.base.num_entries ||
+		    memcmp(chip_layout->entries, dump_layout.entries, sizeof(dump_layout.entries))) {
+			ret = 5;
+			goto _unmap_ret;
+		}
+	}
+
+	*layout = (struct fl_layout *)chip_layout;
+	ret = 0;
+
+_unmap_ret:
+	unmap_flash(flashctx);
+_free_ret:
+	if (ret)
+		free(chip_layout);
+	free(desc);
+	return ret;
 }
 
 /**

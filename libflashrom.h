@@ -63,6 +63,7 @@ int fl_image_verify(fl_flashctx_t *, const void *buffer, size_t buffer_len);
 
 struct fl_layout;
 typedef struct fl_layout fl_layout_t;
+int fl_layout_read_from_ifd(fl_flashctx_t *, fl_layout_t **, const void *dump, size_t len);
 int fl_layout_include_region(fl_layout_t *, const char *name);
 void fl_layout_release(fl_layout_t *);
 void fl_layout_set(fl_flashctx_t *, const fl_layout_t *);

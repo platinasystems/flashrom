@@ -2143,9 +2143,9 @@ int chip_safety_check(const struct flashctx *flash, int force, int read_it, int 
 	return 0;
 }
 
-static int prepare_flash_access(struct flashctx *const flash,
-				const bool read_it, const bool write_it,
-				const bool erase_it, const bool verify_it)
+int prepare_flash_access(struct flashctx *const flash,
+			 const bool read_it, const bool write_it,
+			 const bool erase_it, const bool verify_it)
 {
 	if (chip_safety_check(flash, flash->flags.force, read_it, write_it, erase_it, verify_it)) {
 		msg_cerr("Aborting.\n");
