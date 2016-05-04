@@ -1567,7 +1567,6 @@ int ich_init_spi(struct pci_dev *dev, void *spibar, enum ich_chipset ich_gen)
 	uint16_t tmp2;
 	uint32_t tmp;
 	char *arg;
-	int ich_spi_force = 0;
 	int ich_spi_rw_restricted = 0;
 	int desc_valid = 0;
 	struct ich_descriptors desc = {{ 0 }};
@@ -1639,22 +1638,6 @@ int ich_init_spi(struct pci_dev *dev, void *spibar, enum ich_chipset ich_gen)
 		}
 		free(arg);
 
-		arg = extract_programmer_param("ich_spi_force");
-		if (arg && !strcmp(arg, "yes")) {
-			ich_spi_force = 1;
-			msg_pspew("ich_spi_force enabled.\n");
-		} else if (arg && !strlen(arg)) {
-			msg_perr("Missing argument for ich_spi_force.\n");
-			free(arg);
-			return ERROR_FATAL;
-		} else if (arg) {
-			msg_perr("Unknown argument for ich_spi_force: \"%s\" "
-				 "(not \"yes\").\n", arg);
-			free(arg);
-			return ERROR_FATAL;
-		}
-		free(arg);
-
 		tmp2 = mmio_readw(ich_spibar + ICH9_REG_HSFS);
 		msg_pdbg("0x04: 0x%04x (HSFS)\n", tmp2);
 		prettyprint_ich9_reg_hsfs(tmp2);
@@ -1702,18 +1685,6 @@ int ich_init_spi(struct pci_dev *dev, void *spibar, enum ich_chipset ich_gen)
 			if (!ichspi_lock)
 				ich9_set_pr(i, 0, 0);
 			ich_spi_rw_restricted |= ich9_handle_pr(i);
-		}
-
-		if (ich_spi_rw_restricted) {
-			if (!ich_spi_force)
-				programmer_may_write = 0;
-			msg_pinfo("Writes have been disabled for safety reasons. You can enforce write\n"
-				  "support with the ich_spi_force programmer option, but you will most likely\n"
-				  "harm your hardware! If you force flashrom you will get no support if\n"
-				  "something breaks. On a few mainboards it is possible to enable write\n"
-				  "access by setting a jumper (see its documentation or the board itself).\n");
-			if (ich_spi_force)
-				msg_pinfo("Continuing with write support because the user forced us to!\n");
 		}
 
 		tmp = mmio_readl(ich_spibar + ICH9_REG_SSFS);
