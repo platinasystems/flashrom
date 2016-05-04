@@ -217,6 +217,12 @@ struct flashctx {
 	chipaddr virtual_registers;
 	struct registered_master *mst;
 	const struct fl_layout *layout;
+	struct {
+		bool force;
+		bool force_boardmismatch;
+		bool verify_after_write;
+		bool verify_whole_chip;
+	} flags;
 };
 
 /* Timing used in probe routines. ZERO is -2 to differentiate between an unset

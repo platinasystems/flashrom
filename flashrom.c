@@ -2460,3 +2460,296 @@ out:
 	free(newcontents);
 	return ret;
 }
+
+/** @private */
+static int prepare_flash_access(struct flashctx *const flash,
+				const bool read_it, const bool write_it,
+				const bool erase_it, const bool verify_it)
+{
+	if (chip_safety_check(flash, flash->flags.force, read_it, write_it, erase_it, verify_it)) {
+		msg_cerr("Aborting.\n");
+		return 1;
+	}
+
+	if (flash->layout == get_global_layout() && normalize_romentries(flash)) {
+		msg_cerr("Requested regions can not be handled. Aborting.\n");
+		return 1;
+	}
+
+	if (map_flash(flash) != 0)
+		return 1;
+
+	/* Given the existence of read locks, we want to unlock for read,
+	   erase and write. */
+	if (flash->chip->unlock)
+		flash->chip->unlock(flash);
+
+	return 0;
+}
+
+/**
+ * @addtogroup fl-flash
+ * @{
+ */
+
+/**
+ * @brief Erase the specified ROM chip.
+ *
+ * If a layout is set in the given flash context, only included regions
+ * will be erased.
+ *
+ * @param flashctx The context of the flash chip to erase.
+ * @return 0 on success.
+ */
+int fl_flash_erase(struct flashctx *const flashctx)
+{
+	if (prepare_flash_access(flashctx, false, false, true, false))
+		return 1;
+
+	const int ret = erase_by_layout(flashctx);
+
+	unmap_flash(flashctx);
+
+	return ret;
+}
+
+/** @} */ /* end fl-flash */
+
+/**
+ * @defgroup fl-ops Operations
+ * @{
+ */
+
+/**
+ * @brief Read the current image from the specified ROM chip.
+ *
+ * If a layout is set in the specified flash context, only included regions
+ * will be read.
+ *
+ * @param flashctx The context of the flash chip.
+ * @param buffer Target buffer to write image to.
+ * @param buffer_len Size of target buffer in bytes.
+ * @return 0 on success,
+ *         2 if buffer_len is to short for the flash chip's contents,
+ *         or 1 on any other failure.
+ */
+int fl_image_read(struct flashctx *const flashctx, void *const buffer, const size_t buffer_len)
+{
+	const size_t flash_size = flashctx->chip->total_size * 1024;
+
+	if (flash_size > buffer_len)
+		return 2;
+
+	if (prepare_flash_access(flashctx, true, false, false, false))
+		return 1;
+
+	msg_cinfo("Reading flash... ");
+
+	int ret = 1;
+	if (read_by_layout(flashctx, buffer)) {
+		msg_cerr("Read operation failed!\n");
+		msg_cinfo("FAILED.\n");
+		goto _unmap_ret;
+	}
+	msg_cinfo("done.\n");
+	ret = 0;
+
+_unmap_ret:
+	unmap_flash(flashctx);
+	return ret;
+}
+
+/** @private */
+static void combine_image_by_layout(const struct flashctx *const flashctx,
+				    uint8_t *const newcontents, const uint8_t *const oldcontents)
+{
+	struct fl_layout_single fallback_layout;
+	const struct fl_layout *const layout = get_layout(flashctx, &fallback_layout);
+
+	size_t i;
+	for (i = 0; i < layout->num_entries; ++i) {
+		if (layout->entries[i].included)
+			continue;
+
+		const chipoff_t region_start	= layout->entries[i].start;
+		const chipsize_t region_len	= layout->entries[i].end - layout->entries[i].start + 1;
+
+		memcpy(newcontents + region_start, oldcontents + region_start, region_len);
+	}
+}
+
+/**
+ * @brief Write the specified image to the ROM chip.
+ *
+ * If a layout is set in the specified flash context, only erase blocks that
+ * lap included regions will be touched.
+ *
+ * @param flashctx The context of the flash chip.
+ * @param buffer Source buffer to read image from.
+ * @param buffer_len Size of source buffer in bytes.
+ * @return 0 on success,
+ *         4 if buffer_len doesn't match the size of the flash chip,
+ *         3 if write was tried but nothing has changed,
+ *         2 if write failed and flash contents changed,
+ *         or 1 on any other failure.
+ */
+int fl_image_write(struct flashctx *const flashctx, void *const buffer, const size_t buffer_len)
+{
+	const size_t flash_size = flashctx->chip->total_size * 1024;
+	const bool verify_all = flashctx->flags.verify_whole_chip;
+	const bool verify = flashctx->flags.verify_after_write;
+
+	if (buffer_len != flash_size)
+		return 4;
+
+	int ret = 1;
+
+	uint8_t *const newcontents = buffer;
+	uint8_t *const curcontents = malloc(flash_size);
+	uint8_t *oldcontents = NULL;
+	if (verify_all)
+		oldcontents = malloc(flash_size);
+	if (!curcontents || (verify_all && !oldcontents)) {
+		msg_gerr("Out of memory!\n");
+		goto _free_ret;
+	}
+
+#if CONFIG_INTERNAL == 1
+	if (programmer == PROGRAMMER_INTERNAL && cb_check_image(newcontents, flash_size) < 0) {
+		if (flashctx->flags.force_boardmismatch) {
+			msg_pinfo("Proceeding anyway because user forced us to.\n");
+		} else {
+			msg_perr("Aborting. You can override this with "
+				 "-p internal:boardmismatch=force.\n");
+			goto _free_ret;
+		}
+	}
+#endif
+
+	if (prepare_flash_access(flashctx, false, true, false, verify))
+		goto _free_ret;
+
+	/* Read the whole chip to be able to check whether regions need to be
+	 * erased and to give better diagnostics in case write fails.
+	 * The alternative is to read only the regions which are to be
+	 * preserved, but in that case we might perform unneeded erase which
+	 * takes time as well.
+	 */
+	msg_cinfo("Reading old flash chip contents... ");
+	if (verify_all) {
+		if (flashctx->chip->read(flashctx, oldcontents, 0, flash_size)) {
+			msg_cinfo("FAILED.\n");
+			goto _unmap_ret;
+		}
+		memcpy(curcontents, oldcontents, flash_size);
+	} else {
+		if (read_by_layout(flashctx, curcontents)) {
+			msg_cinfo("FAILED.\n");
+			goto _unmap_ret;
+		}
+	}
+	msg_cinfo("done.\n");
+
+	if (write_by_layout(flashctx, curcontents, newcontents)) {
+		msg_cerr("Uh oh. Erase/write failed. ");
+		ret = 2;
+		if (verify_all) {
+			msg_cerr("Checking if anything has changed.\n");
+			msg_cinfo("Reading current flash chip contents... ");
+			if (!flashctx->chip->read(flashctx, curcontents, 0, flash_size)) {
+				msg_cinfo("done.\n");
+				if (!memcmp(oldcontents, curcontents, flash_size)) {
+					nonfatal_help_message();
+					goto _unmap_ret;
+				}
+				msg_cerr("Apparently at least some data has changed.\n");
+			} else
+				msg_cerr("Can't even read anymore!\n");
+			emergency_help_message();
+			goto _unmap_ret;
+		} else
+			msg_cerr("\n");
+		emergency_help_message();
+		goto _unmap_ret;
+	}
+
+	/* Verify only if we actually changed something. */
+	if (verify && !all_skipped) {
+		const struct fl_layout *const layout_bak = flashctx->layout;
+
+		msg_cinfo("Verifying flash... ");
+
+		/* Work around chips which need some time to calm down. */
+		programmer_delay(1000*1000);
+
+		if (verify_all) {
+			combine_image_by_layout(flashctx, newcontents, oldcontents);
+			flashctx->layout = NULL;
+		}
+		ret = verify_by_layout(flashctx, curcontents, newcontents);
+		flashctx->layout = layout_bak;
+		/* If we tried to write, and verification now fails, we
+		 * might have an emergency situation.
+		 */
+		if (ret)
+			emergency_help_message();
+		else
+			msg_cinfo("VERIFIED.\n");
+	} else {
+		/* We didn't change anything. */
+		ret = 0;
+	}
+
+_unmap_ret:
+	unmap_flash(flashctx);
+_free_ret:
+	free(oldcontents);
+	free(curcontents);
+	return ret;
+}
+
+/**
+ * @brief Verify the ROM chip's contents with the specified image.
+ *
+ * If a layout is set in the specified flash context, only included regions
+ * will be verified.
+ *
+ * @param flashctx The context of the flash chip.
+ * @param buffer Source buffer to verify with.
+ * @param buffer_len Size of source buffer in bytes.
+ * @return 0 on success,
+ *         3 if the chip's contents don't match,
+ *         2 if buffer_len doesn't match the size of the flash chip,
+ *         or 1 on any other failure.
+ */
+int fl_image_verify(struct flashctx *const flashctx, const void *const buffer, const size_t buffer_len)
+{
+	const size_t flash_size = flashctx->chip->total_size * 1024;
+
+	if (buffer_len != flash_size)
+		return 2;
+
+	const uint8_t *const newcontents = buffer;
+	uint8_t *const curcontents = malloc(flash_size);
+	if (!curcontents) {
+		msg_gerr("Out of memory!\n");
+		return 1;
+	}
+
+	int ret = 1;
+
+	if (prepare_flash_access(flashctx, false, false, false, true))
+		goto _free_ret;
+
+	msg_cinfo("Verifying flash... ");
+	ret = verify_by_layout(flashctx, curcontents, newcontents);
+	if (!ret)
+		msg_cinfo("VERIFIED.\n");
+
+	unmap_flash(flashctx);
+_free_ret:
+	free(curcontents);
+	return ret;
+}
+
+/** @} */ /* end fl-ops */
