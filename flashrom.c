@@ -1166,7 +1166,7 @@ int probe_flash(struct registered_master *mst, int startchip, struct flashctx *f
 {
 	const struct flashchip *chip;
 	enum chipbustype buses_common;
-	char *tmp;
+	char *tmp = NULL;
 
 	for (chip = flashchips + startchip; chip && chip->name; chip++) {
 		if (chip_to_probe && strcmp(chip->name, chip_to_probe) != 0)
@@ -1248,9 +1248,12 @@ notfound:
 		return -1;
 
 
+#ifndef __LIBPAYLOAD__
 	tmp = flashbuses_to_text(flash->chip->bustype);
-	msg_cinfo("%s %s flash chip \"%s\" (%d kB, %s) ", force ? "Assuming" : "Found",
-		  flash->chip->vendor, flash->chip->name, flash->chip->total_size, tmp);
+#endif
+	msg_cinfo("%s %s flash chip \"%s\" (%d kB%s%s) ", force ? "Assuming" : "Found",
+		  flash->chip->vendor, flash->chip->name, flash->chip->total_size,
+		  tmp ? ", " : "", tmp ? tmp : "");
 	free(tmp);
 #if CONFIG_INTERNAL == 1
 	if (programmer_table[programmer].map_flash_region == physmap)
