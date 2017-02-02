@@ -1354,8 +1354,10 @@ $(PROGRAM).8: $(PROGRAM).8.tmpl
 install: $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 	mkdir -p $(DESTDIR)$(PREFIX)/sbin
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
+	mkdir -p $(DESTDIR)$(PREFIX)/share/$(PROGRAM)/layouts
 	$(INSTALL) -m 0755 $(PROGRAM)$(EXEC_SUFFIX) $(DESTDIR)$(PREFIX)/sbin
 	$(INSTALL) -m 0644 $(PROGRAM).8 $(DESTDIR)$(MANDIR)/man8
+	$(INSTALL) -m 0644 -t $(DESTDIR)$(PREFIX)/share/$(PROGRAM)/layouts layouts/*
 
 libinstall: libflashrom.a libflashrom.h
 	mkdir -p $(DESTDIR)$(PREFIX)/lib
