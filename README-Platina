@@ -1,0 +1,16 @@
+This version of flashrom is patched to support Broadwell-DE FLASH programming.
+
+See the following discussion:
+
+    https://www.flashrom.org/pipermail/flashrom/2016-August/014756.html
+
+These changes are not in upstream yet. Additionally, there is a layout file for
+the Platina-MK1 which places the BIOS in the last 8MiB of a 16MiB flash.
+
+To read the current flash into a file:
+
+sudo /usr/local/sbin/flashrom -p internal -l /usr/local/share/flashrom/layouts/platina-mk1.xml -i bios -r platina.rom
+
+To write the coreboot.rom file on a device:
+
+sudo /usr/local/sbin/flashrom -p internal -l /usr/local/share/flashrom/layouts/platina-mk1.xml -i bios -w coreboot-platina-mk1.rom -A -V
