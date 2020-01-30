@@ -1,7 +1,7 @@
 /*
  * This file is part of the flashrom project.
  *
- * Copyright (C) 2000 Silicon Integrated System Corporation
+ * Copyright (C) 2009 Sean Nelson <audiohacked@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,30 +18,34 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <stdio.h>
+#include <stdarg.h>
 #include "flash.h"
 
-int write_49f002(struct flashchip *flash, uint8_t *buf)
+int print(int type, const char *fmt, ...)
 {
-	int i;
-	int total_size = flash->total_size * 1024;
-	int page_size = flash->page_size;
-	chipaddr bios = flash->virtual_memory;
-
-	if (erase_chip_jedec(flash)) {
-		fprintf(stderr, "ERASE FAILED!\n");
-		return -1;
+	va_list ap;
+	int ret;
+	FILE *output_type;
+	
+	switch (type)
+	{
+	case MSG_ERROR:
+		output_type = stderr;
+		break;
+	case MSG_BARF:
+		if (verbose < 2) return 0;
+	case MSG_DEBUG:
+		if (verbose < 1) return 0;
+	case MSG_INFO:
+	default:
+		output_type = stdout;
+		break;
 	}
-
-	printf("Programming page: ");
-	for (i = 0; i < total_size / page_size; i++) {
-		printf("%04d at address: 0x%08x ", i, i * page_size);
-		/* Byte-wise writing of 'page_size' bytes. */
-		write_sector_jedec_common(flash, buf + i * page_size,
-				   bios + i * page_size, page_size, 0xffff);
-		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-		fflush(stdout);
-	}
-	printf("\n");
-
-	return 0;
+	
+	va_start(ap, fmt);
+	ret = vfprintf(output_type, fmt, ap);
+	va_end(ap);
+	return ret;
 }
+
