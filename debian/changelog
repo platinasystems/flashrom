@@ -1,3 +1,9 @@
+flashrom (1.1-2) unstable; urgency=medium
+
+  * Add layouts/platina-mk1.xml
+
+ -- Kevin Paul Herbert <kph@platinasystems.com>  Thu, 30 Jan 2020 23:28:58 -0500
+
 flashrom (1.1-1) unstable; urgency=medium
 
   * New upstream version.
