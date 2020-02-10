@@ -1,8 +1,10 @@
-flashrom (1.1-2) unstable; urgency=medium
+flashrom (1.2-1) unstable; urgency=medium
 
-  * Add layouts/platina-mk1.xml
+  * New upstream version. (Closes: #948192)
+  * Bump standards version to 4.5.0.
+  * Add Vcs fields.
 
- -- Kevin Paul Herbert <kph@platinasystems.com>  Thu, 30 Jan 2020 23:28:58 -0500
+ -- Gürkan Myczko <gurkan@phys.ethz.ch>  Mon, 10 Feb 2020 07:05:32 +0100
 
 flashrom (1.1-1) unstable; urgency=medium
 
