@@ -8,8 +8,7 @@ Standards-Version: 4.2.1
 Homepage: http://www.flashrom.org
 
 Package: flashrom-platina
-Breaks: flashrom
-Replaces: flashrom
+Conflicts: flashrom
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Identify, read, write, erase, and verify BIOS/ROM/flash chips
